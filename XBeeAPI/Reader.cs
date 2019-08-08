@@ -109,14 +109,6 @@ namespace XBeeAPI
         /// </summary>
         public event Reader.IOSampleReceivedHandler IOSampleReceived;
         /// <summary>
-        /// This event is fired when an XBee discovers another remote XBee during a discovering operation.
-        /// </summary>
-        public event Reader.DeviceDiscoveredHandler DeviceDiscovered;
-        /// <summary>
-        /// This event is fired when the discovery process finishes, either successfully or due to an error.
-        /// </summary>
-        public event Reader.DiscoveryProcessFinishedHandler DiscoveryProcessFinished;
-        /// <summary>
         /// This event is fired when an XBee receives an explicit data packet.
         /// </summary>
         public event Reader.ExplicitDataReceivedHandler ExplicitDataReceived;
@@ -172,22 +164,6 @@ namespace XBeeAPI
         protected virtual void OnIOSampleReceived(object sample, RemoteXBeeDevice remote, int time)
         {
             IOSampleReceived?.Invoke(this, sample, remote, time);
-        }
-        /// <summary>
-        /// Programmatic trigger for DeviceDiscovered event
-        /// </summary>
-        /// <param name="remote">Remote device that was discovered</param>
-        protected virtual void OnDeviceDiscovered(RemoteXBeeDevice remote)
-        {
-            DeviceDiscovered?.Invoke(this, remote);
-        }
-        /// <summary>
-        /// Programmatic trigger for DiscoveryProcessFinished event
-        /// </summary>
-        /// <param name="status">Network discovery status</param>
-        protected virtual void OnDiscoveryProcessFinished(NetworkDiscoveryStatus.Byte status)
-        {
-            DiscoveryProcessFinished?.Invoke(this, status);
         }
         /// <summary>
         /// Programmatic trigger for ExplicitDataReceived event
@@ -427,8 +403,8 @@ namespace XBeeAPI
             try
             {
                 byte headerByte = (byte)comPort.ReadByte();
-                while (headerByte != SpecialByte.HEADER_BYTE)
-                    headerByte = (byte)comPort.ReadByte();
+                if (headerByte != SpecialByte.HEADER_BYTE)
+                    return null;
 
                 byte[] tempArray = ReadNextByte(operatingMode);
                 tempArray = tempArray.Concat(ReadNextByte(operatingMode)).ToArray();
@@ -934,12 +910,18 @@ namespace XBeeAPI
             if (packet.FrameTypeValue == ApiFrameType.Byte.RECEIVE_PACKET)
             {
                 return (((ReceivePacket)packet).X64bit_addr.Equals(remoteDevice.Address64bit))
-                    || (((ReceivePacket)packet).X16bit_addr.Equals(remoteDevice.Address16bit));
+                        || (((ReceivePacket)packet).X16bit_addr.Equals(remoteDevice.Address16bit))
+                            && ((remoteDevice.Protocol == XBeeProtocol.Byte.RAW_802_15_4
+                            || remoteDevice.Protocol == XBeeProtocol.Byte.DIGI_POINT
+                            || remoteDevice.Protocol == XBeeProtocol.Byte.ZIGBEE));
             }
             else if (packet.FrameTypeValue == ApiFrameType.Byte.REMOTE_AT_COMMAND_RESPONSE)
             {
                 return (((RemoteATCommandPacket)packet).X64bit_addr.Equals(remoteDevice.Address64bit))
-                    || (((RemoteATCommandPacket)packet).X16bit_addr.Equals(remoteDevice.Address16bit));
+                        || (((ReceivePacket)packet).X16bit_addr.Equals(remoteDevice.Address16bit))
+                            && ((remoteDevice.Protocol == XBeeProtocol.Byte.RAW_802_15_4
+                            || remoteDevice.Protocol == XBeeProtocol.Byte.DIGI_POINT
+                            || remoteDevice.Protocol == XBeeProtocol.Byte.ZIGBEE));
             }
             else if (packet.FrameTypeValue == ApiFrameType.Byte.RX_16
                 || packet.FrameTypeValue == ApiFrameType.Byte.RX_64

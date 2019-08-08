@@ -15,7 +15,7 @@ namespace XBeeAPI
         /// <summary>
         /// The default timeout for all synchronous opeartions, in seconds
         /// </summary>
-        public const int DEFAULT_TIMEOUT_SYNC_OPERATIONS = 60;
+        public const int DEFAULT_TIMEOUT_SYNC_OPERATIONS = 4;
         /// <summary>
         /// Pattern used to log packet events
         /// </summary>
@@ -75,6 +75,7 @@ namespace XBeeAPI
             NodeID = null;
             packetListener = null;
             Log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+            genericLock = new object();
         }
 
         /// <summary>
@@ -285,7 +286,7 @@ namespace XBeeAPI
                 RemoteATCommandPacket packet = new RemoteATCommandPacket(GetNextFrameID(), Address64bit,
                     remote16bitAddr, remoteATCmdOpts, Utils.BytesToAscii(command.Command), command.Parameter);
 
-                RemoteATCommandResponsePacket answerPacket = (RemoteATCommandResponsePacket)localXbeeDevice.SendPacket(packet, true);
+                RemoteATCommandResponsePacket answerPacket = (RemoteATCommandResponsePacket)localXbeeDevice.SendPacketSyncAndGetResponse(packet);
                 response = new ATCommandResponse(command, answerPacket.CommValue, answerPacket.ResponseStatus);
             } else
             {
@@ -304,7 +305,7 @@ namespace XBeeAPI
                 //      bug of never retrieving responses from the packet queues until the overflow. However, I think the queues
                 //      have since been modified to automatically discard old entries if full, so returning to SendPacketSyncAndGetResponse
                 //      may be needed.
-                ATCommResponsePacket answerPacket = (ATCommResponsePacket)SendPacket(packet, true);
+                ATCommResponsePacket answerPacket = (ATCommResponsePacket)SendPacketSyncAndGetResponse(packet);
                 response = new ATCommandResponse(command, answerPacket.CommValue, answerPacket.ResponseStatus);
             }
 
@@ -483,10 +484,10 @@ namespace XBeeAPI
                 timeout = value;
                 if (IsRemote())
                 {
-                    localXbeeDevice.ComPort.ReadTimeout = value;
+                    localXbeeDevice.ComPort.ReadTimeout = value * 1000;
                 } else
                 {
-                    ComPort.ReadTimeout = value;
+                    ComPort.ReadTimeout = value * 1000;
                 }
             }
             get
@@ -605,11 +606,18 @@ namespace XBeeAPI
         /// <returns></returns>
         protected byte GetNextFrameID()
         {
-            if (CurrentFrameID == 0xFF)
-                CurrentFrameID = 1;
+            if (IsRemote())
+            {
+                return localXbeeDevice.GetNextFrameID();
+            }
             else
-                CurrentFrameID++;
-            return CurrentFrameID;
+            {
+                if (CurrentFrameID == 0xFF)
+                    CurrentFrameID = 1;
+                else
+                    CurrentFrameID++;
+                return CurrentFrameID;
+            }
         }
 
         /// <summary>
@@ -1030,7 +1038,7 @@ namespace XBeeAPI
 
             // Build the transmit packet and send. Check the response and return
             TransmitPacket packet = new TransmitPacket(GetNextFrameID(), x64addr, x16addr, 0, transmitOptions, data);
-            TransmitStatusPacket status = (TransmitStatusPacket)SendPacket(packet, true);
+            TransmitStatusPacket status = (TransmitStatusPacket)SendPacketSyncAndGetResponse(packet);
             return AfterSendMethod(status);
         }
 
@@ -1073,7 +1081,7 @@ namespace XBeeAPI
                 packet = new TransmitPacket(GetNextFrameID(), x64addr, XBee16BitAddress.UNKNOWN_ADDRESS, 0, transmitOptions, data);
             }
 
-            TransmitStatusPacket status = (TransmitStatusPacket)SendPacket(packet, true);
+            TransmitStatusPacket status = (TransmitStatusPacket)SendPacketSyncAndGetResponse(packet);
             return AfterSendMethod(status);
         }
 
@@ -1450,8 +1458,8 @@ namespace XBeeAPI
             ushort clusterID, ushort profileID, TransmitOptions transmitOptions = TransmitOptions.NONE)
         {
             BeforeSendMethod();
-            return SendPacket(BuildExplDataPacket(remote, data, srcEndpoint, destEndpoint,
-                clusterID, profileID, false, transmitOptions), true);
+            return SendPacketSyncAndGetResponse(BuildExplDataPacket(remote, data, srcEndpoint, destEndpoint,
+                clusterID, profileID, false, transmitOptions));
         }
 
         /// <summary>
@@ -1491,8 +1499,8 @@ namespace XBeeAPI
         protected XBeeAPIPacket SendExplDataBroadcast(byte[] data, byte srcEndpoint, byte destEndpoint,
             ushort clusterID, ushort profileID, TransmitOptions transmitOptions = TransmitOptions.NONE)
         {
-            return SendPacket(BuildExplDataPacket(null, data, srcEndpoint, destEndpoint,
-                clusterID, profileID, true, transmitOptions), true);
+            return SendPacketSyncAndGetResponse(BuildExplDataPacket(null, data, srcEndpoint, destEndpoint,
+                clusterID, profileID, true, transmitOptions));
         }
 
         /// <summary>

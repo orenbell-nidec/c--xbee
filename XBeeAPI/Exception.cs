@@ -66,11 +66,16 @@ namespace XBeeAPI
     public class InvalidOperatingModeException : ConnectionException
     {
         private const string DEFAULT_MESSAGE = "The operating mode of the XBee device is not supported by the library.";
+        public OperatingMode.Byte OperatingMode { get; private set; }
 
-        public InvalidOperatingModeException(string message = DEFAULT_MESSAGE) : base(message) { }
+        public InvalidOperatingModeException(string message = DEFAULT_MESSAGE) : base(message) {
+            OperatingMode = XBeeAPI.OperatingMode.Byte.UNKNOWN;
+        }
 
         public InvalidOperatingModeException(OperatingMode.Byte operatingMode)
-            : base("Unsupported operating mode: " + OperatingMode.Get(operatingMode)) { }
+            : base("Unsupported operating mode: " + XBeeAPI.OperatingMode.Get(operatingMode)) {
+            OperatingMode = operatingMode;
+        }
     }
 
     /// <summary>
